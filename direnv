@@ -1,0 +1,61 @@
+#!/bin/bash
+
+function cd {
+    builtin cd "$@" 
+	_clearenv
+    _setenv
+}
+
+function find_up {
+    if [[ -f "$1/$2" ]]; then
+		echo "$(find_up $(dirname $1) $2) $1/$2"
+    fi
+}
+
+function _clearenv {
+
+    STORAGE_DIR=~/.direnv/$OLDPWD
+    if [[ -d $STORAGE_DIR && -f $STORAGE_DIR/env ]]; then
+
+        if [[ ! -z $DEBUG_DIRENV ]]; then 
+            echo Cleaning $OLDPWD
+            echo Removing environment variables as recorded in $STORAGE_DIR
+            cat $STORAGE_DIR/env | sed 's/^/  Unsetting $/'
+        fi
+
+        for var in $(cat $STORAGE_DIR/env); do
+            unset $var
+        done
+
+        rm $STORAGE_DIR/env
+
+        # clean up everything we can
+        find ~/.direnv/ -type d -mindepth 1 -empty -delete
+
+        [[ ! -z $DEBUG_DIRENV ]] && tree ~/.direnv
+    fi
+}
+
+function _setenv {
+    if [[ -f .direnv ]]; then
+        [[ ! -z $DEBUG_DIRENV ]] && echo "Setting up environment as configured in $(pwd)/.direnv"
+
+        STORAGE_DIR=~/.direnv/$PWD
+        mkdir -p $STORAGE_DIR
+        if [[ -f $STORAGE_DIR/env ]]; then
+            rm $STORAGE_DIR/env
+        fi
+
+        # the current environment is the accumulation of all parent directory .direnv files
+        for direnv in $(find_up $PWD ".direnv"); do
+            # set the environment
+            $(grep ^export $direnv)
+
+            grep ^export $direnv | gsed 's/export\s\s*\(.*\)=.*/\1/g' >> $STORAGE_DIR/env
+        done
+
+        chmod 700 $STORAGE_DIR/env
+
+        [[ ! -z $DEBUG_DIRENV ]] && tree ~/.direnv
+    fi
+}
